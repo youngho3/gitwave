@@ -1,24 +1,67 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import '../../services/git_service.dart';
+import '../services/git_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({Key? key}) : super(key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? selectedPath;
-  List<String> gitLogs = [];
+  final GitService _gitService = GitService();
+  String _cloneStatus = '저장소를 선택하세요.';
+  List<String> _clonedRepos = [];
 
-  Future<void> pickRepo() async {
-    final path = await FilePicker.platform.getDirectoryPath();
-    if (path != null) {
-      setState(() => selectedPath = path);
-      final logs = await GitService.getGitLog(path);
-      setState(() => gitLogs = logs);
+  void _showRepoUrlDialog() async {
+    final TextEditingController _urlController = TextEditingController();
+
+    final String? repoUrl = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('저장소 URL 입력'),
+            content: TextField(
+              controller: _urlController,
+              decoration: const InputDecoration(
+                hintText: '예: https://github.com/사용자명/저장소명',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final url = _urlController.text.trim();
+                  if (url.isNotEmpty) {
+                    Navigator.pop(context, url);
+                  }
+                },
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+    );
+
+    if (repoUrl != null && repoUrl.isNotEmpty) {
+      setState(() {
+        _cloneStatus = '클론 중...';
+      });
+
+      final clonedPath = await _gitService.cloneRepository(repoUrl);
+
+      setState(() {
+        if (clonedPath != null) {
+          if (!_clonedRepos.contains(clonedPath)) {
+            _clonedRepos.add(clonedPath);
+          }
+          _cloneStatus = '✅ 클론 성공: $clonedPath';
+        } else {
+          _cloneStatus = '❌ 클론 실패';
+        }
+      });
     }
   }
 
@@ -27,21 +70,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('GitWave')),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             ElevatedButton(
-              onPressed: pickRepo,
-              child: const Text('Git 저장소 선택'),
+              onPressed: _showRepoUrlDialog,
+              child: const Text('저장소 선택'),
             ),
-            const SizedBox(height: 20),
-            if (selectedPath != null) Text('선택한 경로: $selectedPath'),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            Text(_cloneStatus, style: const TextStyle(fontSize: 16)),
+            const Divider(height: 32),
             Expanded(
               child: ListView.builder(
-                itemCount: gitLogs.length,
+                itemCount: _clonedRepos.length,
                 itemBuilder: (context, index) {
-                  return Text(gitLogs[index]);
+                  return ListTile(
+                    leading: const Icon(Icons.folder),
+                    title: Text(_clonedRepos[index]),
+                  );
                 },
               ),
             ),
